@@ -944,6 +944,7 @@ class SpeechRecognizer:
                     # 检查是否返回了JSON但我们想要SRT
                     if response_format == "srt":
                         content_str = str(transcript)
+                        # logger.warning(content_str)
                         if content_str.strip().startswith("{") and "segments" in content_str:
                             try:
                                 import json
@@ -981,10 +982,12 @@ class SpeechRecognizer:
                             # 检查是否返回了JSON但我们想要SRT
                             if response_format == "srt":
                                 content_str = str(segment_transcript)
+                                # logger.warning(content_str)
                                 if content_str.strip().startswith("{") and "segments" in content_str:
                                     try:
                                         import json
                                         data = json.loads(content_str)
+                                        
                                         if "segments" in data:
                                             logger.warning(f"OpenAI API片段 {i+1} 返回了JSON格式，正在转换为SRT...")
                                             segment_transcript = self._json_to_srt(data)
