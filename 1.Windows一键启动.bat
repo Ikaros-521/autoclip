@@ -24,7 +24,7 @@ echo.
 :: Launch Mode: normal (default) or dev
 :: normal: Uses compiled frontend, no Node.js required
 :: dev: Uses Node.js/Vite for frontend hot-reloading
-set "LAUNCH_MODE=normal"
+set "LAUNCH_MODE=dev"
 
 :: Override with command line argument if provided
 if "%~1"=="dev" set "LAUNCH_MODE=dev"

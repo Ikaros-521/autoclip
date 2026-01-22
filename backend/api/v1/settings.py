@@ -17,6 +17,7 @@ class SettingsRequest(BaseModel):
     llm_provider: Optional[str] = None
     dashscope_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    openai_base_url: Optional[str] = None
     gemini_api_key: Optional[str] = None
     siliconflow_api_key: Optional[str] = None
     model_name: Optional[str] = None
@@ -29,6 +30,7 @@ class ApiKeyTestRequest(BaseModel):
     provider: str
     api_key: str
     model_name: str
+    base_url: Optional[str] = None
 
 class ApiKeyTestResponse(BaseModel):
     """API密钥测试响应"""
@@ -47,6 +49,7 @@ def load_settings() -> Dict[str, Any]:
         "llm_provider": "dashscope",
         "dashscope_api_key": "",
         "openai_api_key": "",
+        "openai_base_url": "",
         "gemini_api_key": "",
         "siliconflow_api_key": "",
         "model_name": "qwen-plus",
@@ -105,6 +108,9 @@ async def update_settings(request: SettingsRequest):
         if request.openai_api_key is not None:
             settings["openai_api_key"] = request.openai_api_key
         
+        if request.openai_base_url is not None:
+            settings["openai_base_url"] = request.openai_base_url
+        
         if request.gemini_api_key is not None:
             settings["gemini_api_key"] = request.gemini_api_key
         
@@ -154,7 +160,12 @@ async def test_api_key(request: ApiKeyTestRequest) -> ApiKeyTestResponse:
         
         # 测试连接
         llm_manager = get_llm_manager()
-        success = llm_manager.test_provider_connection(provider_type, request.api_key, request.model_name)
+        success = llm_manager.test_provider_connection(
+            provider_type, 
+            request.api_key, 
+            request.model_name,
+            base_url=request.base_url
+        )
         
         if success:
             return ApiKeyTestResponse(success=True)

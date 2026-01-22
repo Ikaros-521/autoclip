@@ -35,6 +35,7 @@ class LLMManager:
             "llm_provider": "dashscope",
             "dashscope_api_key": "",
             "openai_api_key": "",
+            "openai_base_url": "",
             "gemini_api_key": "",
             "siliconflow_api_key": "",
             "model_name": "qwen-plus",
@@ -72,9 +73,16 @@ class LLMManager:
             # 获取对应提供商的API密钥
             api_key = self._get_api_key_for_provider(provider_type)
             
+            # 获取其他参数（如OpenAI的Base URL）
+            kwargs = {}
+            if provider_type == ProviderType.OPENAI:
+                base_url = self.settings.get("openai_base_url")
+                if base_url:
+                    kwargs["base_url"] = base_url
+            
             if api_key:
                 self.current_provider = LLMProviderFactory.create_provider(
-                    provider_type, api_key, model_name
+                    provider_type, api_key, model_name, **kwargs
                 )
                 logger.info(f"已初始化{provider_type.value}提供商，模型: {model_name}, API密钥: {api_key[:8]}...")
             else:
@@ -168,10 +176,10 @@ class LLMManager:
                 time.sleep(2 ** attempt)  # 指数退避
         return ""
     
-    def test_provider_connection(self, provider_type: ProviderType, api_key: str, model_name: str) -> bool:
+    def test_provider_connection(self, provider_type: ProviderType, api_key: str, model_name: str, base_url: Optional[str] = None) -> bool:
         """测试提供商连接"""
         try:
-            provider = LLMProviderFactory.create_provider(provider_type, api_key, model_name)
+            provider = LLMProviderFactory.create_provider(provider_type, api_key, model_name, base_url=base_url)
             return provider.test_connection()
         except Exception as e:
             logger.error(f"测试{provider_type.value}连接失败: {e}")

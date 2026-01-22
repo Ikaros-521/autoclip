@@ -181,7 +181,8 @@ class OpenAIProvider(LLMProvider):
         super().__init__(api_key, model_name, **kwargs)
         try:
             import openai
-            self.client = openai.OpenAI(api_key=api_key)
+            base_url = kwargs.get('base_url')
+            self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
         except ImportError:
             raise ImportError("请安装openai: pip install openai")
     

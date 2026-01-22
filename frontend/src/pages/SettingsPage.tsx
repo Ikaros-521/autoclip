@@ -95,6 +95,7 @@ const SettingsPage: React.FC = () => {
   const handleTestApiKey = async () => {
     const apiKey = form.getFieldValue(providerConfig[selectedProvider as keyof typeof providerConfig].apiKeyField)
     const modelName = form.getFieldValue('model_name')
+    const baseUrl = selectedProvider === 'openai' ? form.getFieldValue('openai_base_url') : undefined
     
     if (!apiKey) {
       message.error('请先输入API密钥')
@@ -108,7 +109,7 @@ const SettingsPage: React.FC = () => {
 
     try {
       setLoading(true)
-      const result = await settingsApi.testApiKey(selectedProvider, apiKey, modelName)
+      const result = await settingsApi.testApiKey(selectedProvider, apiKey, modelName, baseUrl)
       if (result.success) {
         message.success('API密钥测试成功！')
       } else {
@@ -209,6 +210,22 @@ const SettingsPage: React.FC = () => {
                     className="settings-input"
                   />
                 </Form.Item>
+
+                {/* OpenAI Base URL 输入 (仅OpenAI显示) */}
+                {selectedProvider === 'openai' && (
+                  <Form.Item
+                    label="OpenAI Base URL (可选)"
+                    name="openai_base_url"
+                    className="form-item"
+                    tooltip="如果您使用自定义的OpenAI接口代理，请在此输入Base URL"
+                  >
+                    <Input
+                      placeholder="例如: https://api.openai-proxy.com/v1"
+                      prefix={<ApiOutlined />}
+                      className="settings-input"
+                    />
+                  </Form.Item>
+                )}
 
                 {/* 模型选择 */}
                 <Form.Item
