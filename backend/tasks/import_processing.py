@@ -30,6 +30,20 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
     try:
         logger.info(f"开始处理导入任务: {project_id}")
         
+        # 验证视频文件是否存在
+        if not Path(video_path).exists():
+            error_msg = f"视频文件不存在: {video_path}"
+            logger.error(error_msg)
+            # 尝试更新项目状态为失败
+            try:
+                db = next(get_db())
+                project_service = ProjectService(db)
+                project_service.update_project_status(project_id, "failed")
+                db.close()
+            except:
+                pass
+            raise FileNotFoundError(error_msg)
+        
         # 获取数据库会话
         db = next(get_db())
         project_service = ProjectService(db)
@@ -95,6 +109,8 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
                     logger.warning(f"Whisper字幕生成失败: {str(inner_e)}，将跳过字幕生成继续处理")
                     # 创建一个空的SRT文件，确保流程不中断
                     raw_dir = Path(video_path).parent
+                    # 确保目录存在
+                    raw_dir.mkdir(parents=True, exist_ok=True)
                     srt_path = raw_dir / "input.srt"
                     with open(srt_path, "w", encoding="utf-8") as f:
                         f.write("1\n00:00:00,000 --> 00:00:01,000\n[无字幕]\n")
@@ -104,6 +120,8 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
                 logger.error(f"Whisper字幕模块初始化失败: {str(e)}")
                 # 同样创建空字幕文件
                 raw_dir = Path(video_path).parent
+                # 确保目录存在
+                raw_dir.mkdir(parents=True, exist_ok=True)
                 srt_path = raw_dir / "input.srt"
                 with open(srt_path, "w", encoding="utf-8") as f:
                     f.write("1\n00:00:00,000 --> 00:00:01,000\n[无字幕]\n")
@@ -152,21 +170,42 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
         }
         
     except Exception as e:
-        logger.error(f"导入任务失败: {project_id}, 错误: {e}")
+        logger.error(f"导入任务失败: {project_id}, 错误: {e}", exc_info=True)
         
         # 更新项目状态为失败
         try:
             db = next(get_db())
             project_service = ProjectService(db)
             project_service.update_project_status(project_id, "failed")
-        except:
-            pass
+            
+            # 尝试记录详细错误信息
+            try:
+                project = project_service.get(project_id)
+                if project:
+                    if not project.processing_config:
+                        project.processing_config = {}
+                    project.processing_config["error_message"] = str(e)
+                    db.commit()
+            except:
+                pass
+                
+            db.close()
+        except Exception as db_e:
+            logger.error(f"更新项目失败状态时出错: {db_e}")
         
-        self.update_state(state='FAILURE', meta={'error': str(e)})
-        raise
+        # 显式更新任务状态为失败，但不抛出异常，防止Celery Worker崩溃
+        self.update_state(state='FAILURE', meta={'error': str(e), 'exc_type': type(e).__name__})
+        
+        return {
+            'status': 'failed',
+            'project_id': project_id,
+            'error': str(e)
+        }
     finally:
         try:
-            db.close()
+            # 只有在db被定义且未关闭的情况下才关闭
+            if 'db' in locals() and db:
+                db.close()
         except:
             pass
 
