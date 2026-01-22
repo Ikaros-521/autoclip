@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Layout, Card, Form, Input, Button, Typography, Space, Alert, Divider, Row, Col, Tabs, message, Select, Tag, AutoComplete } from 'antd'
-import { KeyOutlined, SaveOutlined, ApiOutlined, SettingOutlined, InfoCircleOutlined, UserOutlined, RobotOutlined } from '@ant-design/icons'
+import { Layout, Card, Form, Input, Button, Typography, Space, Alert, Divider, Row, Col, Tabs, message, Select, Tag, AutoComplete, Modal, List } from 'antd'
+import { KeyOutlined, SaveOutlined, ApiOutlined, SettingOutlined, InfoCircleOutlined, UserOutlined, RobotOutlined, SyncOutlined } from '@ant-design/icons'
 import { settingsApi } from '../services/api'
 import BilibiliManager from '../components/BilibiliManager'
 import './SettingsPage.css'
@@ -16,6 +16,8 @@ const SettingsPage: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<any>({})
   const [currentProvider, setCurrentProvider] = useState<any>({})
   const [selectedProvider, setSelectedProvider] = useState('dashscope')
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelSelectionVisible, setModelSelectionVisible] = useState(false)
 
   // 提供商配置
   const providerConfig = {
@@ -60,13 +62,11 @@ const SettingsPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [settings, models, provider] = await Promise.all([
+      const [settings, provider] = await Promise.all([
         settingsApi.getSettings(),
-        settingsApi.getAvailableModels(),
         settingsApi.getCurrentProvider()
       ])
       
-      setAvailableModels(models)
       setCurrentProvider(provider)
       setSelectedProvider(settings.llm_provider || 'dashscope')
       
@@ -75,6 +75,25 @@ const SettingsPage: React.FC = () => {
     } catch (error) {
       console.error('加载数据失败:', error)
     }
+  }
+
+  const fetchModels = async () => {
+    try {
+      setModelsLoading(true)
+      const models = await settingsApi.getAvailableModels()
+      setAvailableModels(models)
+      message.success('模型列表刷新成功')
+      setModelSelectionVisible(true)
+    } catch (error) {
+      message.error('获取模型列表失败')
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  const handleModelSelect = (modelName: string) => {
+    form.setFieldsValue({ model_name: modelName })
+    setModelSelectionVisible(false)
   }
 
   // 保存配置
@@ -230,27 +249,77 @@ const SettingsPage: React.FC = () => {
                 {/* 模型选择 */}
                 <Form.Item
                   label="选择模型"
-                  name="model_name"
                   className="form-item"
-                  rules={[{ required: true, message: '请选择或输入模型' }]}
+                  required
                 >
-                  <AutoComplete
-                    className="settings-input"
-                    placeholder="请选择或输入模型"
-                    options={availableModels[selectedProvider]?.map((model: any) => ({
-                      value: model.name,
-                      label: (
-                        <Space>
-                          <span>{model.display_name}</span>
-                          <Tag size="small">最大{model.max_tokens} tokens</Tag>
-                        </Space>
-                      ),
-                    }))}
-                    filterOption={(inputValue, option) =>
-                      option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
-                    }
-                  />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Form.Item
+                      name="model_name"
+                      noStyle
+                      rules={[{ required: true, message: '请选择或输入模型' }]}
+                    >
+                      <AutoComplete
+                        className="settings-input"
+                        placeholder="请选择或输入模型"
+                        style={{ flex: 1 }}
+                        options={availableModels[selectedProvider]?.map((model: any) => ({
+                          value: model.name,
+                          label: (
+                            <Space>
+                              <span>{model.display_name}</span>
+                              <Tag size="small">最大{model.max_tokens} tokens</Tag>
+                            </Space>
+                          ),
+                        }))}
+                        filterOption={(inputValue, option) =>
+                          option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+                        }
+                      />
+                    </Form.Item>
+                    <Button
+                      icon={<SyncOutlined />}
+                      onClick={fetchModels}
+                      loading={modelsLoading}
+                    >
+                      刷新
+                    </Button>
+                  </div>
                 </Form.Item>
+
+                {/* 模型选择弹窗 */}
+                <Modal
+                  title={`选择${providerConfig[selectedProvider as keyof typeof providerConfig]?.name || ''}模型`}
+                  open={modelSelectionVisible}
+                  onCancel={() => setModelSelectionVisible(false)}
+                  footer={null}
+                  width={600}
+                >
+                  <List
+                    dataSource={availableModels[selectedProvider] || []}
+                    renderItem={(item: any) => (
+                      <List.Item
+                        className="model-list-item"
+                        onClick={() => handleModelSelect(item.name)}
+                        style={{ color: '#ffffff', cursor: 'pointer', padding: '12px', borderRadius: '4px', transition: 'background 0.3s' }}
+                      >
+                        <List.Item.Meta
+                          title={
+                            <Space>
+                              <span>{item.display_name}</span>
+                              <Tag color="blue">{item.name}</Tag>
+                            </Space>
+                          }
+                          description={
+                            <Space>
+                              <Tag>最大上下文: {item.max_tokens}</Tag>
+                            </Space>
+                          }
+                        />
+                      </List.Item>
+                    )}
+                    locale={{ emptyText: '暂无可用模型，请检查API Key或网络连接' }}
+                  />
+                </Modal>
 
                 <Form.Item className="form-item">
                   <Space>
