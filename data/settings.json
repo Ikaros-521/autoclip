@@ -1,6 +1,6 @@
 {
   "llm_provider": "dashscope",
-  "dashscope_api_key": "sk-123456",
+  "dashscope_api_key": "sk-2da11111111111111",
   "openai_api_key": "",
   "gemini_api_key": "",
   "siliconflow_api_key": "",

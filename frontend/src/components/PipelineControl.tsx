@@ -58,7 +58,7 @@ const PipelineControl: React.FC<PipelineControlProps> = ({
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`http://localhost:8000/api/v1/pipeline/status/${projectId}`);
+      const response = await fetch(`/api/v1/pipeline/status/${projectId}`);
       if (!response.ok) {
         throw new Error('获取流水线状态失败');
       }
@@ -83,7 +83,7 @@ const PipelineControl: React.FC<PipelineControlProps> = ({
     try {
       setActionLoading(true);
       
-      const response = await fetch(`http://localhost:8000/api/v1/pipeline/start/${projectId}`, {
+      const response = await fetch(`/api/v1/pipeline/start/${projectId}`, {
         method: 'POST'
       });
       
@@ -109,7 +109,7 @@ const PipelineControl: React.FC<PipelineControlProps> = ({
     try {
       setActionLoading(true);
       
-      const response = await fetch(`http://localhost:8000/api/v1/pipeline/stop/${projectId}`, {
+      const response = await fetch(`/api/v1/pipeline/stop/${projectId}`, {
         method: 'POST'
       });
       
@@ -135,7 +135,7 @@ const PipelineControl: React.FC<PipelineControlProps> = ({
     try {
       setActionLoading(true);
       
-      const response = await fetch(`http://localhost:8000/api/v1/pipeline/restart/${projectId}`, {
+      const response = await fetch(`/api/v1/pipeline/restart/${projectId}`, {
         method: 'POST'
       });
       

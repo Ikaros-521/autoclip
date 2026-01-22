@@ -148,7 +148,12 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     }
 
     setConnectionStatus('connecting');
-    const wsUrl = `ws://localhost:8000/api/v1/ws/${userId}`;
+    // 动态构建WebSocket URL
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // 在开发环境(port 3000)下，依然连接到 localhost:8000
+    // 在生产环境(port 8000)下，连接到当前 host
+    const host = window.location.port === '3000' ? 'localhost:8000' : window.location.host;
+    const wsUrl = `${protocol}//${host}/api/v1/ws/${userId}`;
     
     try {
       const ws = new WebSocket(wsUrl);

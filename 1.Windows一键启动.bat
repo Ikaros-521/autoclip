@@ -18,6 +18,27 @@ echo            AutoClip Windows Launcher
 echo =======================================================
 echo.
 
+:: =======================================================
+:: Configuration
+:: =======================================================
+:: Launch Mode: normal (default) or dev
+:: normal: Uses compiled frontend, no Node.js required
+:: dev: Uses Node.js/Vite for frontend hot-reloading
+set "LAUNCH_MODE=normal"
+
+:: Override with command line argument if provided
+if "%~1"=="dev" set "LAUNCH_MODE=dev"
+if "%~1"=="normal" set "LAUNCH_MODE=normal"
+
+if "%LAUNCH_MODE%"=="dev" (
+    set "DEV_MODE=1"
+    echo [INFO] Starting in DEVELOPMENT Mode...
+) else (
+    set "DEV_MODE=0"
+    echo [INFO] Starting in NORMAL Mode...
+)
+echo.
+
 :: 1. Check Environment
 echo [INFO] Checking environment...
 
@@ -28,11 +49,14 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-where node >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [ERROR] Node.js not found. Please install Node.js.
-    pause
-    exit /b 1
+if "%DEV_MODE%"=="1" (
+    where node >nul 2>nul
+    if !errorlevel! neq 0 (
+        echo [ERROR] Node.js not found. Development mode requires Node.js.
+        echo [TIP] Please install Node.js or use Normal Mode.
+        pause
+        exit /b 1
+    )
 )
 
 :: 2. Setup Python Virtual Environment
@@ -142,35 +166,50 @@ start "AutoClip Celery" cmd /k "title AutoClip Celery && call venv\Scripts\activ
 echo [INFO] Starting Backend Service...
 start "AutoClip Backend" cmd /k "title AutoClip Backend && call venv\Scripts\activate.bat && python -m uvicorn backend.main:app --host 0.0.0.0 --port %BACKEND_PORT% --reload"
 
-:: 8. Start Frontend
-echo [INFO] Starting Frontend Service...
-cd frontend
-if not exist "node_modules\.bin\vite.cmd" (
-    echo [INFO] Installing frontend dependencies...
-    call npm install
-    if !errorlevel! neq 0 (
-        echo [WARNING] npm install failed. Retrying with npmmirror...
-        call npm install --registry=https://registry.npmmirror.com
+
+:: 8. Start Frontend (Conditional)
+if "%DEV_MODE%"=="1" (
+    echo [INFO] Starting Frontend Dev Server...
+    cd frontend
+    if not exist "node_modules\.bin\vite.cmd" (
+        echo [INFO] Installing frontend dependencies...
+        call npm install
+        if !errorlevel! neq 0 (
+            echo [WARNING] npm install failed. Retrying with npmmirror...
+            call npm install --registry=https://registry.npmmirror.com
+        )
     )
+    start "AutoClip Frontend" cmd /k "title AutoClip Frontend && npm run dev -- --host 0.0.0.0 --port %FRONTEND_PORT%"
+    cd ..
+) else (
+    echo [INFO] Frontend is served by Backend service.
 )
-start "AutoClip Frontend" cmd /k "title AutoClip Frontend && npm run dev -- --host 0.0.0.0 --port %FRONTEND_PORT%"
-cd ..
+
 
 :: 9. Wait and Open Browser
 echo [INFO] System is starting, waiting for services...
 timeout /t 8 >nul
 
 echo [SUCCESS] Opening browser...
-start http://localhost:%FRONTEND_PORT%
+if "%DEV_MODE%"=="1" (
+    start http://localhost:%FRONTEND_PORT%
+) else (
+    start http://localhost:%BACKEND_PORT%
+)
 
 echo.
 echo =======================================================
 echo            AutoClip Started Successfully!
 echo =======================================================
 echo [INFO]
-echo 1. Backend API: http://localhost:%BACKEND_PORT%
-echo 2. Frontend:    http://localhost:%FRONTEND_PORT%
-echo 3. Do NOT close the black command windows.
-echo 4. Run stop_autoclip.bat to stop all services.
+if "%DEV_MODE%"=="1" (
+    echo 1. Frontend: http://localhost:%FRONTEND_PORT%
+    echo 2. Backend API: http://localhost:%BACKEND_PORT%/docs
+) else (
+    echo 1. App URL: http://localhost:%BACKEND_PORT%
+    echo 2. API Docs: http://localhost:%BACKEND_PORT%/docs
+)
 echo.
+echo [TIP] Do not close the opened console windows.
+echo [TIP] To stop the application, close all console windows.
 pause

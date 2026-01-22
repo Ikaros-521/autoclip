@@ -4,7 +4,7 @@ import { Project, Clip, Collection } from '../store/useProjectStore'
 // 格式化时间函数（暂时未使用，保留备用）
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1', // FastAPI后端服务器地址
+  baseURL: '/api/v1', // 使用相对路径，兼容开发和生产环境
   timeout: 300000, // 增加到5分钟超时
   headers: {
     'Content-Type': 'application/json',
@@ -119,12 +119,12 @@ export interface BilibiliDownloadTask {
 export const settingsApi = {
   // 获取系统配置
   getSettings: (): Promise<any> => {
-    return api.get('/settings')
+    return api.get('/settings/')
   },
 
   // 更新系统配置
   updateSettings: (settings: any): Promise<any> => {
-    return api.post('/settings', settings)
+    return api.post('/settings/', settings)
   },
 
   // 测试API密钥
@@ -382,7 +382,7 @@ export const projectApi = {
     
     try {
       // 对于blob类型的响应，需要直接使用axios而不是经过拦截器
-      const response = await axios.get(`http://localhost:8000/api/v1${url}`, { 
+      const response = await axios.get(`${api.defaults.baseURL}${url}`, { 
         responseType: 'blob',
         headers: {
           'Accept': 'application/octet-stream'
@@ -442,13 +442,13 @@ export const projectApi = {
   // 获取切片视频URL
   getClipVideoUrl: (projectId: string, clipId: string, _clipTitle?: string): string => {
     // 使用projects路由获取切片视频
-    return `http://localhost:8000/api/v1/projects/${projectId}/clips/${clipId}`
+    return `${api.defaults.baseURL}/projects/${projectId}/clips/${clipId}`
   },
 
   // 获取合集视频URL
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
     // 使用files路由获取合集视频
-    return `http://localhost:8000/api/v1/files/projects/${projectId}/collections/${collectionId}`
+    return `${api.defaults.baseURL}/files/projects/${projectId}/collections/${collectionId}`
   },
 
   // 生成项目缩略图

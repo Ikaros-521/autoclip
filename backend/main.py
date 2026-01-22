@@ -3,7 +3,9 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+import os
 
 # 导入配置管理
 from .core.config import settings, get_logging_config, get_api_key
@@ -144,6 +146,39 @@ from .core.error_middleware import global_exception_handler
 
 # 注册全局异常处理器
 app.add_exception_handler(Exception, global_exception_handler)
+
+# -------------------------------------------------------------------------
+# 前端静态文件服务 (SPA支持)
+# -------------------------------------------------------------------------
+# 定位前端构建目录
+# 假设 backend/main.py 在 backend 目录下，项目根目录在上一级
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_DIST = os.path.join(PROJECT_ROOT, "frontend", "dist")
+
+if os.path.exists(FRONTEND_DIST):
+    logger.info(f"Serving frontend from {FRONTEND_DIST}")
+    
+    # 挂载静态资源目录 /assets
+    assets_dir = os.path.join(FRONTEND_DIST, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    # 处理所有其他路由，支持 SPA
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # 如果是 API 请求但未匹配到（404），返回 JSON 错误而不是 HTML
+        if full_path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "API endpoint not found"})
+            
+        # 尝试直接服务文件（如 favicon.ico, robots.txt 等）
+        file_path = os.path.join(FRONTEND_DIST, full_path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+            
+        # SPA 路由回退到 index.html
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+else:
+    logger.warning(f"Frontend build directory not found: {FRONTEND_DIST}")
 
 if __name__ == "__main__":
     import uvicorn

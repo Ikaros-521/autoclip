@@ -71,7 +71,7 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
       const fetchSnapshots = async () => {
         try {
           const queryString = projectIds.map(id => `project_ids=${id}`).join('&')
-          const response = await fetch(`http://localhost:8000/api/v1/simple-progress/snapshot?${queryString}`)
+          const response = await fetch(`/api/v1/simple-progress/snapshot?${queryString}`)
           
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)
