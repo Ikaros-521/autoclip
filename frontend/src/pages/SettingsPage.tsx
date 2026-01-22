@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Layout, Card, Form, Input, Button, Typography, Space, Alert, Divider, Row, Col, Tabs, message, Select, Tag } from 'antd'
+import { Layout, Card, Form, Input, Button, Typography, Space, Alert, Divider, Row, Col, Tabs, message, Select, Tag, AutoComplete } from 'antd'
 import { KeyOutlined, SaveOutlined, ApiOutlined, SettingOutlined, InfoCircleOutlined, UserOutlined, RobotOutlined } from '@ant-design/icons'
 import { settingsApi } from '../services/api'
 import BilibiliManager from '../components/BilibiliManager'
@@ -215,25 +215,24 @@ const SettingsPage: React.FC = () => {
                   label="选择模型"
                   name="model_name"
                   className="form-item"
-                  rules={[{ required: true, message: '请选择模型' }]}
+                  rules={[{ required: true, message: '请选择或输入模型' }]}
                 >
-                  <Select
+                  <AutoComplete
                     className="settings-input"
-                    placeholder="请选择模型"
-                    showSearch
-                    filterOption={(input, option) =>
-                      (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
-                    }
-                  >
-                    {availableModels[selectedProvider]?.map((model: any) => (
-                      <Select.Option key={model.name} value={model.name}>
+                    placeholder="请选择或输入模型"
+                    options={availableModels[selectedProvider]?.map((model: any) => ({
+                      value: model.name,
+                      label: (
                         <Space>
                           <span>{model.display_name}</span>
                           <Tag size="small">最大{model.max_tokens} tokens</Tag>
                         </Space>
-                      </Select.Option>
-                    ))}
-                  </Select>
+                      ),
+                    }))}
+                    filterOption={(inputValue, option) =>
+                      option!.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+                    }
+                  />
                 </Form.Item>
 
                 <Form.Item className="form-item">
