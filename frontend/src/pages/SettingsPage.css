@@ -1,4 +1,7 @@
 /* 配置页面样式 - 深色主题优化 */
+.ant-space-item {
+  color: white;
+}
 
 .settings-page {
   padding: 24px;

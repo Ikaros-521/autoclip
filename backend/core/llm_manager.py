@@ -212,20 +212,43 @@ class LLMManager:
     
     def get_all_available_models(self) -> Dict[str, List[Dict[str, Any]]]:
         """获取所有可用模型"""
-        all_models = LLMProviderFactory.get_all_available_models()
         result = {}
         
-        for provider_type, models in all_models.items():
-            provider_name = provider_type.value
-            result[provider_name] = [
-                {
-                    "name": model.name,
-                    "display_name": model.display_name,
-                    "max_tokens": model.max_tokens,
-                    "description": model.description
-                }
-                for model in models
-            ]
+        # 遍历所有支持的提供商
+        for provider_type in ProviderType:
+            try:
+                # 获取配置的API密钥和参数
+                api_key = self._get_api_key_for_provider(provider_type) or "dummy_key"
+                model_name = "dummy_model"
+                kwargs = {}
+                
+                # 特殊处理OpenAI的Base URL
+                if provider_type == ProviderType.OPENAI:
+                    base_url = self.settings.get("openai_base_url")
+                    if base_url:
+                        kwargs["base_url"] = base_url
+                
+                # 创建提供商实例
+                provider = LLMProviderFactory.create_provider(
+                    provider_type, api_key, model_name, **kwargs
+                )
+                
+                # 获取模型列表
+                models = provider.get_available_models()
+                
+                provider_name = provider_type.value
+                result[provider_name] = [
+                    {
+                        "name": model.name,
+                        "display_name": model.display_name,
+                        "max_tokens": model.max_tokens,
+                        "description": model.description
+                    }
+                    for model in models
+                ]
+            except Exception as e:
+                logger.warning(f"无法获取{provider_type.value}的模型列表: {e}")
+                result[provider_type.value] = []
         
         return result
     

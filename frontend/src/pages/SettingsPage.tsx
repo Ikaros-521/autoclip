@@ -281,7 +281,7 @@ const SettingsPage: React.FC = () => {
                       onClick={fetchModels}
                       loading={modelsLoading}
                     >
-                      刷新
+                      刷新模型列表
                     </Button>
                   </div>
                 </Form.Item>

@@ -226,7 +226,7 @@ class OpenAIProvider(LLMProvider):
     
     def get_available_models(self) -> List[ModelInfo]:
         """获取OpenAI可用模型"""
-        return [
+        default_models = [
             ModelInfo(
                 name="gpt-3.5-turbo",
                 display_name="GPT-3.5 Turbo",
@@ -247,8 +247,51 @@ class OpenAIProvider(LLMProvider):
                 provider=ProviderType.OPENAI,
                 max_tokens=128000,
                 description="OpenAI GPT-4 Turbo模型"
+            ),
+            ModelInfo(
+                name="gpt-4o",
+                display_name="GPT-4o",
+                provider=ProviderType.OPENAI,
+                max_tokens=128000,
+                description="OpenAI GPT-4o模型"
+            ),
+            ModelInfo(
+                name="gpt-4o-mini",
+                display_name="GPT-4o Mini",
+                provider=ProviderType.OPENAI,
+                max_tokens=128000,
+                description="OpenAI GPT-4o Mini模型"
             )
         ]
+
+        # 如果没有有效的API Key，或者使用的是dummy_key，直接返回默认列表
+        if not self.api_key or self.api_key == "dummy_key":
+            return default_models
+
+        try:
+            # 尝试从API获取模型列表
+            models_page = self.client.models.list()
+            api_models = []
+            
+            for model in models_page.data:
+                # 简单的过滤逻辑，只保留gpt开头的模型，或者如果是自定义base_url则全部保留
+                is_custom_url = self.kwargs.get('base_url') is not None
+                if is_custom_url or model.id.startswith("gpt"):
+                    api_models.append(ModelInfo(
+                        name=model.id,
+                        display_name=model.id,
+                        provider=ProviderType.OPENAI,
+                        max_tokens=128000, # API通常不返回context window大小，默认给个较大值
+                        description=f"OpenAI {model.id} 模型"
+                    ))
+            
+            # 按名称排序
+            api_models.sort(key=lambda x: x.name)
+            return api_models
+            
+        except Exception as e:
+            logger.warning(f"从OpenAI获取模型列表失败: {e}，使用默认列表")
+            return default_models
 
 class GeminiProvider(LLMProvider):
     """Google Gemini提供商"""
@@ -403,6 +446,13 @@ class SiliconFlowProvider(LLMProvider):
                 provider=ProviderType.SILICONFLOW,
                 max_tokens=65536,
                 description="硅基流动DeepSeek-V2.5模型"
+            ),
+            ModelInfo(
+                name="Qwen/Qwen3-8B",
+                display_name="Qwen3-8B",
+                provider=ProviderType.SILICONFLOW,
+                max_tokens=65536,
+                description="硅基流动Qwen3-8B模型"
             )
         ]
 
