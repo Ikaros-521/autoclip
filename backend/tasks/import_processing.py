@@ -82,36 +82,52 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
             
             try:
                 from backend.utils.speech_recognizer import generate_subtitle_for_video
+                from backend.api.v1.settings import load_settings
                 
-                # 根据视频分类选择模型
-                project = project_service.get(project_id)
-                video_category = "knowledge"  # 默认分类
-                if project and project.processing_config:
-                    video_category = project.processing_config.get("video_category", "knowledge")
+                # 加载全局设置
+                settings = load_settings()
                 
-                model = "base"  # 默认使用平衡模型
-                if video_category in ["business", "knowledge"]:
-                    model = "small"  # 知识类内容使用更准确的模型
-                elif video_category == "speech":
-                    model = "medium"  # 演讲内容使用高精度模型
+                method = settings.get("asr_method", "auto")
+                language = settings.get("asr_language", "auto")
+                model = settings.get("asr_model", "base")
+                output_format = settings.get("asr_output_format", "srt")
+                openai_api_key = settings.get("asr_openai_api_key")
+                openai_base_url = settings.get("asr_openai_base_url")
                 
-                logger.info(f"使用Whisper生成字幕 - 语言: auto, 模型: {model}")
+                # 如果用户没有显式修改模型配置（默认base），则启用智能模型选择
+                if model == "base":
+                    # 根据视频分类选择模型
+                    project = project_service.get(project_id)
+                    video_category = "knowledge"  # 默认分类
+                    if project and project.processing_config:
+                        video_category = project.processing_config.get("video_category", "knowledge")
+                    
+                    if video_category in ["business", "knowledge"]:
+                        model = "small"  # 知识类内容使用更准确的模型
+                    elif video_category == "speech":
+                        model = "medium"  # 演讲内容使用高精度模型
+                
+                logger.info(f"使用语音识别生成字幕 - 方法: {method}, 语言: {language}, 模型: {model}, 格式: {output_format}")
                 
                 try:
                     generated_subtitle = generate_subtitle_for_video(
                         Path(video_path),
-                        language="auto",
-                        model=model
+                        method=method,
+                        language=language,
+                        model=model,
+                        output_format=output_format,
+                        openai_api_key=openai_api_key,
+                        openai_base_url=openai_base_url
                     )
                     srt_path = str(generated_subtitle)
-                    logger.info(f"Whisper字幕生成成功: {srt_path}")
+                    logger.info(f"字幕生成成功: {srt_path}")
                 except Exception as inner_e:
                     logger.warning(f"Whisper字幕生成失败: {str(inner_e)}，将跳过字幕生成继续处理")
                     # 创建一个空的SRT文件，确保流程不中断
                     raw_dir = Path(video_path).parent
                     # 确保目录存在
                     raw_dir.mkdir(parents=True, exist_ok=True)
-                    srt_path = raw_dir / "input.srt"
+                    srt_path = str(raw_dir / "input.srt")
                     with open(srt_path, "w", encoding="utf-8") as f:
                         f.write("1\n00:00:00,000 --> 00:00:01,000\n[无字幕]\n")
                     logger.info(f"已生成占位字幕文件: {srt_path}")
@@ -122,7 +138,7 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
                 raw_dir = Path(video_path).parent
                 # 确保目录存在
                 raw_dir.mkdir(parents=True, exist_ok=True)
-                srt_path = raw_dir / "input.srt"
+                srt_path = str(raw_dir / "input.srt")
                 with open(srt_path, "w", encoding="utf-8") as f:
                     f.write("1\n00:00:00,000 --> 00:00:01,000\n[无字幕]\n")
                 logger.info(f"已生成占位字幕文件: {srt_path}")
@@ -139,7 +155,7 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
                 task_result = submit_video_pipeline_task(
                     project_id=project_id,
                     input_video_path=video_path,
-                    input_srt_path=srt_path
+                    input_srt_path=str(srt_path)
                 )
                 
                 if task_result['success']:

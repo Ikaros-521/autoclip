@@ -83,22 +83,22 @@ def _ensure_bcut_asr_available():
     if BCUT_ASR_AVAILABLE:
         return True
     
-    logger.info("bcut-asr不可用，尝试自动安装...")
+    logger.info("bcut-asr不可用")
     
-    if _auto_install_bcut_asr():
-        # 重新尝试导入
-        try:
-            from bcut_asr import BcutASR
-            from bcut_asr.orm import ResultStateEnum
-            BCUT_ASR_AVAILABLE = True
-            logger.info("✅ bcut-asr安装成功，现在可以使用")
-            return True
-        except ImportError:
-            logger.error("❌ bcut-asr安装后仍无法导入")
-            return False
-    else:
-        logger.warning("⚠️ bcut-asr自动安装失败，将使用其他方法")
-        return False
+    # if _auto_install_bcut_asr():
+    #     # 重新尝试导入
+    #     try:
+    #         from bcut_asr import BcutASR
+    #         from bcut_asr.orm import ResultStateEnum
+    #         BCUT_ASR_AVAILABLE = True
+    #         logger.info("✅ bcut-asr安装成功，现在可以使用")
+    #         return True
+    #     except ImportError:
+    #         logger.error("❌ bcut-asr安装后仍无法导入")
+    #         return False
+    # else:
+    #     logger.warning("⚠️ bcut-asr自动安装失败，将使用其他方法")
+    #     return False
 
 
 class SpeechRecognitionMethod(str, Enum):
@@ -156,6 +156,10 @@ class SpeechRecognitionConfig:
     enable_fallback: bool = True  # 是否启用回退机制
     fallback_method: SpeechRecognitionMethod = SpeechRecognitionMethod.WHISPER_LOCAL  # 回退方法
     
+    # OpenAI API 设置
+    openai_api_key: Optional[str] = None
+    openai_base_url: Optional[str] = None
+    
     def __post_init__(self):
         """验证配置参数"""
         # 验证方法
@@ -174,7 +178,7 @@ class SpeechRecognitionConfig:
         
         # 验证模型
         valid_models = ["tiny", "base", "small", "medium", "large"]
-        if self.model not in valid_models:
+        if self.model not in valid_models and self.method == SpeechRecognitionMethod.WHISPER_LOCAL:
             raise ValueError(f"不支持的Whisper模型: {self.model}")
         
         # 验证超时时间
@@ -225,6 +229,7 @@ class SpeechRecognizer:
     
     def _check_bcut_asr_availability(self) -> bool:
         """检查bcut-asr是否可用，如果不可用则尝试自动安装"""
+        return BCUT_ASR_AVAILABLE
         if BCUT_ASR_AVAILABLE:
             return True
         
@@ -260,9 +265,12 @@ class SpeechRecognizer:
         return False
     
     def _check_openai_availability(self) -> bool:
-        """检查OpenAI API是否可用"""
-        api_key = os.getenv("OPENAI_API_KEY")
-        return api_key is not None and len(api_key.strip()) > 0
+        """检查OpenAI API是否可用 (仅检查库是否安装)"""
+        try:
+            import openai
+            return True
+        except ImportError:
+            return False
     
     def _check_azure_speech_availability(self) -> bool:
         """检查Azure Speech Services是否可用"""
@@ -288,13 +296,15 @@ class SpeechRecognizer:
         app_key = os.getenv("ALIYUN_SPEECH_APP_KEY")
         return access_key is not None and secret_key is not None and app_key is not None
     
-    def _extract_audio_from_video(self, video_path: Path, output_dir: Path) -> Path:
+    def _extract_audio_from_video(self, video_path: Path, output_dir: Path, audio_format: str = "wav", bitrate: str = "64k") -> Path:
         """
         从视频文件中提取音频
         
         Args:
             video_path: 视频文件路径
             output_dir: 输出目录
+            audio_format: 音频格式 (wav, mp3)
+            bitrate: 比特率 (仅mp3有效)，默认64k
             
         Returns:
             提取的音频文件路径
@@ -307,7 +317,7 @@ class SpeechRecognizer:
                 raise SpeechRecognitionError("ffmpeg不可用，请安装ffmpeg")
             
             # 生成音频文件路径
-            audio_filename = f"{video_path.stem}_audio.wav"
+            audio_filename = f"{video_path.stem}_audio.{audio_format}"
             audio_path = output_dir / audio_filename
             
             # 如果音频文件已存在，直接返回
@@ -318,20 +328,49 @@ class SpeechRecognizer:
             logger.info(f"正在从视频提取音频: {video_path} -> {audio_path}")
             
             # 使用ffmpeg提取音频
-            cmd = [
-                'ffmpeg',
-                '-i', str(video_path),
-                '-vn',  # 不处理视频流
-                '-acodec', 'pcm_s16le',  # 使用PCM 16位编码
-                '-ar', '16000',  # 采样率16kHz
-                '-ac', '1',  # 单声道
-                '-y',  # 覆盖输出文件
-                str(audio_path)
-            ]
+            if audio_format == "mp3":
+                cmd = [
+                    'ffmpeg',
+                    '-i', str(video_path),
+                    '-vn',  # 不处理视频流
+                    '-acodec', 'libmp3lame',
+                    '-b:a', bitrate,
+                    '-y',  # 覆盖输出文件
+                    str(audio_path)
+                ]
+            else:
+                # 默认 wav (pcm_s16le)
+                cmd = [
+                    'ffmpeg',
+                    '-i', str(video_path),
+                    '-vn',  # 不处理视频流
+                    '-acodec', 'pcm_s16le',  # 使用PCM 16位编码
+                    '-ar', '16000',  # 采样率16kHz
+                    '-ac', '1',  # 单声道
+                    '-y',  # 覆盖输出文件
+                    str(audio_path)
+                ]
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             if result.returncode != 0:
+                # 如果mp3编码失败（可能是没有libmp3lame），尝试使用aac
+                if audio_format == "mp3" and "Encoder (codec libmp3lame) not found" in result.stderr:
+                     logger.warning("未找到libmp3lame编码器，尝试使用aac...")
+                     audio_path_aac = audio_path.with_suffix(".m4a")
+                     cmd = [
+                        'ffmpeg',
+                        '-i', str(video_path),
+                        '-vn',
+                        '-acodec', 'aac',
+                        '-b:a', bitrate,
+                        '-y',
+                        str(audio_path_aac)
+                     ]
+                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                     if result.returncode == 0:
+                         return audio_path_aac
+                
                 raise SpeechRecognitionError(f"音频提取失败: {result.stderr}")
             
             if not audio_path.exists():
@@ -345,6 +384,146 @@ class SpeechRecognizer:
         except Exception as e:
             raise SpeechRecognitionError(f"音频提取失败: {e}")
     
+    def _split_audio_file(self, audio_path: Path, segment_duration: int) -> List[Path]:
+        """
+        使用ffmpeg切分音频文件
+        
+        Args:
+            audio_path: 音频文件路径
+            segment_duration: 切分时长（秒）
+            
+        Returns:
+            切分后的文件路径列表
+        """
+        try:
+            output_pattern = str(audio_path.parent / f"{audio_path.stem}_%03d{audio_path.suffix}")
+            
+            cmd = [
+                'ffmpeg',
+                '-i', str(audio_path),
+                '-f', 'segment',
+                '-segment_time', str(segment_duration),
+                '-c', 'copy',
+                '-y',
+                output_pattern
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            
+            if result.returncode != 0:
+                raise SpeechRecognitionError(f"音频切分失败: {result.stderr}")
+                
+            # 获取生成的片段文件
+            segment_files = sorted(list(audio_path.parent.glob(f"{audio_path.stem}_*{audio_path.suffix}")))
+            # 排除原始文件
+            segment_files = [f for f in segment_files if f.name != audio_path.name]
+            
+            return segment_files
+            
+        except Exception as e:
+            raise SpeechRecognitionError(f"音频切分失败: {e}")
+
+    def _parse_srt_timestamp(self, timestamp: str) -> float:
+        """解析SRT时间戳为秒数"""
+        # 00:00:00,000
+        try:
+            time_parts = timestamp.replace(',', '.').split(':')
+            hours = int(time_parts[0])
+            minutes = int(time_parts[1])
+            seconds = float(time_parts[2])
+            return hours * 3600 + minutes * 60 + seconds
+        except Exception:
+            return 0.0
+
+    def _adjust_srt_content(self, srt_content: str, time_offset: float, start_index: int) -> tuple[str, int]:
+        """
+        调整SRT内容的时间戳和序号
+        
+        Args:
+            srt_content: SRT内容
+            time_offset: 时间偏移量（秒）
+            start_index: 起始序号
+            
+        Returns:
+            (调整后的SRT内容, 下一个序号)
+        """
+        lines = srt_content.strip().split('\n')
+        adjusted_lines = []
+        current_index = start_index
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # 跳过空行
+            if not line:
+                i += 1
+                continue
+                
+            # 尝试解析序号
+            if line.isdigit():
+                # 写入新序号
+                adjusted_lines.append(str(current_index))
+                current_index += 1
+                
+                # 下一行应该是时间戳
+                if i + 1 < len(lines):
+                    time_line = lines[i+1].strip()
+                    if '-->' in time_line:
+                        try:
+                            start_str, end_str = time_line.split(' --> ')
+                            start_seconds = self._parse_srt_timestamp(start_str) + time_offset
+                            end_seconds = self._parse_srt_timestamp(end_str) + time_offset
+                            
+                            new_time_line = f"{self._format_timestamp(start_seconds)} --> {self._format_timestamp(end_seconds)}"
+                            adjusted_lines.append(new_time_line)
+                        except Exception:
+                             adjusted_lines.append(time_line)
+                        i += 2
+                    else:
+                        # 格式不对，直接复制
+                        adjusted_lines.append(lines[i+1])
+                        i += 2
+                else:
+                    i += 1
+                
+                # 后面的行是字幕内容，直到遇到空行或下一个数字
+                while i < len(lines):
+                    content_line = lines[i].strip()
+                    if not content_line:
+                        adjusted_lines.append("")
+                        i += 1
+                        break
+                    # Check if it looks like start of new block
+                    if content_line.isdigit() and i+1 < len(lines) and '-->' in lines[i+1]:
+                         break
+                    
+                    adjusted_lines.append(lines[i])
+                    i += 1
+            else:
+                # 不是数字开头，可能是文件头的元数据或其他，直接复制
+                adjusted_lines.append(line)
+                i += 1
+                
+        return "\n".join(adjusted_lines), current_index
+
+    def _json_to_srt(self, json_data: Dict[str, Any]) -> str:
+        """将OpenAI JSON响应转换为SRT格式"""
+        if "segments" not in json_data:
+            return ""
+        
+        segments = json_data["segments"]
+        srt_parts = []
+        
+        for i, segment in enumerate(segments, start=1):
+            start = self._format_timestamp(segment.get("start", 0))
+            end = self._format_timestamp(segment.get("end", 0))
+            text = segment.get("text", "").strip()
+            
+            srt_parts.append(f"{i}\n{start} --> {end}\n{text}\n")
+            
+        return "\n".join(srt_parts)
+
     def generate_subtitle(self, video_path: Path, output_path: Optional[Path] = None, 
                          config: Optional[SpeechRecognitionConfig] = None) -> Path:
         """
@@ -704,14 +883,144 @@ class SpeechRecognizer:
                                     config: SpeechRecognitionConfig) -> Path:
         """使用OpenAI API生成字幕"""
         if not self.available_methods[SpeechRecognitionMethod.OPENAI_API]:
-            raise SpeechRecognitionError("OpenAI API不可用，请设置OPENAI_API_KEY环境变量")
+            raise SpeechRecognitionError("OpenAI库未安装，请执行: pip install openai")
+        
+        api_key = config.openai_api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+             raise SpeechRecognitionError("未配置OpenAI API Key，请在设置中配置或设置环境变量OPENAI_API_KEY")
+
+        base_url = config.openai_base_url or os.getenv("OPENAI_BASE_URL")
         
         try:
+            import openai
             logger.info(f"开始使用OpenAI API生成字幕: {video_path}")
             
-            # 这里需要实现OpenAI API调用
-            # 由于需要额外的依赖，这里先抛出异常
-            raise SpeechRecognitionError("OpenAI API功能暂未实现，请使用本地Whisper")
+            # 提取音频 (使用mp3格式以节省空间，48kbps)
+            # OpenAI 限制 25MB
+            # 48kbps 下，25MB 大约可以存储 72 分钟的音频
+            # 设置切片时间为 20 分钟 (1200秒)
+            audio_path = self._extract_audio_from_video(video_path, output_path.parent, audio_format="mp3", bitrate="48k")
+            
+            # 检查音频文件大小（OpenAI限制25MB）
+            file_size = audio_path.stat().st_size
+            max_size = 25 * 1024 * 1024
+            
+            # 初始化客户端
+            client_kwargs = {"api_key": api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+            
+            client = openai.OpenAI(**client_kwargs)
+            
+            transcript = ""
+            
+            # 确定模型名称
+            model_name = "whisper-1"
+            # 如果config.model不是本地模型的标准名称，且不为空，则使用用户配置的
+            local_models = ["tiny", "base", "small", "medium", "large", "turbo"]
+            if config.model and config.model not in local_models:
+                 model_name = config.model
+            
+            # 确定response_format
+            response_format = "srt"
+            if config.output_format == "vtt":
+                response_format = "vtt"
+            elif config.output_format == "json":
+                response_format = "json"
+            elif config.output_format == "txt":
+                response_format = "text"
+            
+            if file_size <= max_size:
+                # 文件小于25MB，直接处理
+                logger.info(f"音频文件大小 ({file_size / 1024 / 1024:.2f}MB) 未超过25MB，直接处理")
+                with open(audio_path, "rb") as audio_file:
+                    transcript = client.audio.transcriptions.create(
+                        model=model_name, 
+                        file=audio_file,
+                        response_format=response_format,
+                        language=None if config.language == LanguageCode.AUTO else config.language.value
+                    )
+                    
+                    # 检查是否返回了JSON但我们想要SRT
+                    if response_format == "srt":
+                        content_str = str(transcript)
+                        if content_str.strip().startswith("{") and "segments" in content_str:
+                            try:
+                                import json
+                                data = json.loads(content_str)
+                                if "segments" in data:
+                                    logger.warning("OpenAI API返回了JSON格式，正在转换为SRT...")
+                                    transcript = self._json_to_srt(data)
+                            except Exception as e:
+                                logger.warning(f"尝试转换JSON为SRT失败: {e}")
+            else:
+                # 文件大于25MB，需要切分
+                logger.warning(f"音频文件大小 ({file_size / 1024 / 1024:.2f}MB) 超过25MB限制，开始切分...")
+                
+                # 切分音频 (每20分钟一段)
+                segment_duration = 1200
+                segment_files = self._split_audio_file(audio_path, segment_duration)
+                
+                logger.info(f"音频已切分为 {len(segment_files)} 个片段，开始逐个识别...")
+                
+                full_transcript = ""
+                current_index_offset = 1
+                
+                for i, segment_file in enumerate(segment_files):
+                    logger.info(f"正在识别片段 {i+1}/{len(segment_files)}: {segment_file.name}")
+                    
+                    try:
+                        with open(segment_file, "rb") as audio_file:
+                            segment_transcript = client.audio.transcriptions.create(
+                                    model=model_name, 
+                                    file=audio_file,
+                                    response_format=response_format,
+                                    language=None if config.language == LanguageCode.AUTO else config.language.value
+                                )
+                            
+                            # 检查是否返回了JSON但我们想要SRT
+                            if response_format == "srt":
+                                content_str = str(segment_transcript)
+                                if content_str.strip().startswith("{") and "segments" in content_str:
+                                    try:
+                                        import json
+                                        data = json.loads(content_str)
+                                        if "segments" in data:
+                                            logger.warning(f"OpenAI API片段 {i+1} 返回了JSON格式，正在转换为SRT...")
+                                            segment_transcript = self._json_to_srt(data)
+                                    except Exception:
+                                        pass
+
+                            # 只有SRT格式才支持合并和调整时间戳
+                            if response_format == "srt":
+                                # 合并结果
+                                time_offset = i * segment_duration
+                                adjusted_srt, next_index = self._adjust_srt_content(segment_transcript, time_offset, current_index_offset)
+                                full_transcript += adjusted_srt + "\n\n"
+                                current_index_offset = next_index
+                            else:
+                                # 其他格式直接拼接（可能不完美，但暂不支持复杂合并）
+                                full_transcript += str(segment_transcript) + "\n"
+                        
+                    except Exception as e:
+                        logger.error(f"识别片段 {segment_file.name} 失败: {e}")
+                        raise
+                    finally:
+                        # 清理片段文件
+                        try:
+                            if segment_file.exists():
+                                os.remove(segment_file)
+                        except Exception as e:
+                            logger.warning(f"无法删除临时片段文件 {segment_file}: {e}")
+                
+                transcript = full_transcript.strip()
+            
+            # 写入文件
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(str(transcript))
+                
+            logger.info(f"OpenAI API字幕生成成功: {output_path}")
+            return output_path
             
         except Exception as e:
             error_msg = f"OpenAI API生成字幕时发生错误: {e}"
@@ -784,7 +1093,10 @@ class SpeechRecognizer:
 
 def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = None, 
                                method: str = "auto", language: str = "auto", 
-                               model: str = "base", enable_fallback: bool = True) -> Path:
+                               model: str = "base", output_format: str = "srt",
+                               enable_fallback: bool = True,
+                               openai_api_key: Optional[str] = None,
+                               openai_base_url: Optional[str] = None) -> Path:
     """
     为视频生成字幕文件的便捷函数
     
@@ -794,7 +1106,10 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         method: 生成方法 ("auto", "bcut_asr", "whisper_local", "openai_api", "azure_speech", "google_speech", "aliyun_speech")
         language: 语言代码
         model: Whisper模型大小（仅对whisper_local有效）
+        output_format: 输出格式 ("srt", "vtt", "txt", "json")
         enable_fallback: 是否启用回退机制
+        openai_api_key: OpenAI API Key
+        openai_base_url: OpenAI Base URL
         
     Returns:
         生成的字幕文件路径
@@ -807,7 +1122,10 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         method=SpeechRecognitionMethod(method) if method != "auto" else SpeechRecognitionMethod.BCUT_ASR,
         language=LanguageCode(language),
         model=model,
-        enable_fallback=enable_fallback
+        output_format=output_format,
+        enable_fallback=enable_fallback,
+        openai_api_key=openai_api_key,
+        openai_base_url=openai_base_url
     )
     
     recognizer = SpeechRecognizer()

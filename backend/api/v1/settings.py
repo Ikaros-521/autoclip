@@ -24,6 +24,20 @@ class SettingsRequest(BaseModel):
     chunk_size: Optional[int] = None
     min_score_threshold: Optional[float] = None
     max_clips_per_collection: Optional[int] = None
+    
+    # ASR设置
+    asr_method: Optional[str] = None
+    asr_language: Optional[str] = None
+    asr_model: Optional[str] = None
+    asr_timeout: Optional[int] = None
+    asr_output_format: Optional[str] = None
+    asr_enable_timestamps: Optional[bool] = None
+    asr_enable_punctuation: Optional[bool] = None
+    asr_enable_speaker_diarization: Optional[bool] = None
+    
+    # ASR OpenAI 设置
+    asr_openai_api_key: Optional[str] = None
+    asr_openai_base_url: Optional[str] = None
 
 class ApiKeyTestRequest(BaseModel):
     """API密钥测试请求"""
@@ -55,7 +69,18 @@ def load_settings() -> Dict[str, Any]:
         "model_name": "qwen-plus",
         "chunk_size": 5000,
         "min_score_threshold": 0.7,
-        "max_clips_per_collection": 5
+        "max_clips_per_collection": 5,
+        # ASR默认设置
+        "asr_method": "whisper_local",
+        "asr_language": "auto",
+        "asr_model": "base",
+        "asr_timeout": 60,
+        "asr_output_format": "srt",
+        "asr_enable_timestamps": True,
+        "asr_enable_punctuation": True,
+        "asr_enable_speaker_diarization": False,
+        "asr_openai_api_key": "",
+        "asr_openai_base_url": ""
     }
     
     if settings_file.exists():
@@ -98,27 +123,27 @@ async def update_settings(request: SettingsRequest):
         
         # 更新多提供商设置
         if request.llm_provider is not None:
-            settings["llm_provider"] = request.llm_provider
+            settings["llm_provider"] = request.llm_provider.strip()
         
         if request.dashscope_api_key is not None:
-            settings["dashscope_api_key"] = request.dashscope_api_key
+            settings["dashscope_api_key"] = request.dashscope_api_key.strip()
             # 同时设置环境变量（保持兼容性）
-            os.environ["DASHSCOPE_API_KEY"] = request.dashscope_api_key
+            os.environ["DASHSCOPE_API_KEY"] = settings["dashscope_api_key"]
         
         if request.openai_api_key is not None:
-            settings["openai_api_key"] = request.openai_api_key
+            settings["openai_api_key"] = request.openai_api_key.strip()
         
         if request.openai_base_url is not None:
-            settings["openai_base_url"] = request.openai_base_url
+            settings["openai_base_url"] = request.openai_base_url.strip()
         
         if request.gemini_api_key is not None:
-            settings["gemini_api_key"] = request.gemini_api_key
+            settings["gemini_api_key"] = request.gemini_api_key.strip()
         
         if request.siliconflow_api_key is not None:
-            settings["siliconflow_api_key"] = request.siliconflow_api_key
+            settings["siliconflow_api_key"] = request.siliconflow_api_key.strip()
         
         if request.model_name is not None:
-            settings["model_name"] = request.model_name
+            settings["model_name"] = request.model_name.strip()
         
         if request.chunk_size is not None:
             settings["chunk_size"] = request.chunk_size
@@ -128,6 +153,37 @@ async def update_settings(request: SettingsRequest):
         
         if request.max_clips_per_collection is not None:
             settings["max_clips_per_collection"] = request.max_clips_per_collection
+            
+        # 更新ASR设置
+        if request.asr_method is not None:
+            settings["asr_method"] = request.asr_method.strip()
+        
+        if request.asr_language is not None:
+            settings["asr_language"] = request.asr_language.strip()
+            
+        if request.asr_model is not None:
+            settings["asr_model"] = request.asr_model.strip()
+            
+        if request.asr_timeout is not None:
+            settings["asr_timeout"] = request.asr_timeout
+            
+        if request.asr_output_format is not None:
+            settings["asr_output_format"] = request.asr_output_format.strip()
+            
+        if request.asr_enable_timestamps is not None:
+            settings["asr_enable_timestamps"] = request.asr_enable_timestamps
+            
+        if request.asr_enable_punctuation is not None:
+            settings["asr_enable_punctuation"] = request.asr_enable_punctuation
+            
+        if request.asr_enable_speaker_diarization is not None:
+            settings["asr_enable_speaker_diarization"] = request.asr_enable_speaker_diarization
+        
+        if request.asr_openai_api_key is not None:
+            settings["asr_openai_api_key"] = request.asr_openai_api_key.strip()
+            
+        if request.asr_openai_base_url is not None:
+            settings["asr_openai_base_url"] = request.asr_openai_base_url.strip()
         
         # 保存设置
         save_settings(settings)
@@ -162,9 +218,9 @@ async def test_api_key(request: ApiKeyTestRequest) -> ApiKeyTestResponse:
         llm_manager = get_llm_manager()
         success = llm_manager.test_provider_connection(
             provider_type, 
-            request.api_key, 
-            request.model_name,
-            base_url=request.base_url
+            request.api_key.strip(), 
+            request.model_name.strip(),
+            base_url=request.base_url.strip() if request.base_url else None
         )
         
         if success:

@@ -42,6 +42,10 @@ class SpeechRecognitionRequest(BaseModel):
     enable_timestamps: bool = True
     enable_punctuation: bool = True
     enable_speaker_diarization: bool = False
+    
+    # OpenAI API 设置
+    openai_api_key: Optional[str] = None
+    openai_base_url: Optional[str] = None
 
 
 @router.get("/status", response_model=SpeechRecognitionStatus)
@@ -126,6 +130,22 @@ async def test_speech_recognition(request: SpeechRecognitionRequest):
                 raise HTTPException(
                     status_code=400,
                     detail=f"不支持的Whisper模型: {request.model}"
+                )
+        
+        # 验证OpenAI API配置
+        if request.method == "openai_api":
+            # 检查openai库是否安装 (available_methods已经检查了)
+            if not available_methods.get("openai_api", False):
+                raise HTTPException(status_code=400, detail="OpenAI库未安装，请在服务器端执行 pip install openai")
+            
+            # 验证API Key
+            # 优先使用请求中的Key，如果没有则尝试从环境变量获取（由SpeechRecognizer处理，但这里做预检查）
+            import os
+            api_key = request.openai_api_key or os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="未配置OpenAI API Key，请填写配置或设置环境变量OPENAI_API_KEY"
                 )
         
         return {

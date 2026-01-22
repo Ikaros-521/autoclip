@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Layout, Card, Form, Input, Button, Typography, Space, Alert, Divider, Row, Col, Tabs, message, Select, Tag, AutoComplete, Modal, List } from 'antd'
-import { KeyOutlined, SaveOutlined, ApiOutlined, SettingOutlined, InfoCircleOutlined, UserOutlined, RobotOutlined, SyncOutlined } from '@ant-design/icons'
-import { settingsApi } from '../services/api'
+import { Layout, Card, Form, Input, Button, Typography, Space, Alert, Divider, Row, Col, Tabs, message, Select, Tag, AutoComplete, Modal, List, Switch, InputNumber } from 'antd'
+import { KeyOutlined, SaveOutlined, ApiOutlined, SettingOutlined, InfoCircleOutlined, UserOutlined, RobotOutlined, SyncOutlined, AudioOutlined } from '@ant-design/icons'
+import { settingsApi, speechRecognitionApi } from '../services/api'
 import BilibiliManager from '../components/BilibiliManager'
 import './SettingsPage.css'
 
@@ -18,6 +18,11 @@ const SettingsPage: React.FC = () => {
   const [selectedProvider, setSelectedProvider] = useState('dashscope')
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelSelectionVisible, setModelSelectionVisible] = useState(false)
+
+  // ASR状态
+  const [asrStatus, setAsrStatus] = useState<any>(null)
+  const [asrTesting, setAsrTesting] = useState(false)
+  const [selectedAsrMethod, setSelectedAsrMethod] = useState('bcut_asr')
 
   // 提供商配置
   const providerConfig = {
@@ -58,7 +63,18 @@ const SettingsPage: React.FC = () => {
   // 加载数据
   useEffect(() => {
     loadData()
+    fetchAsrStatus()
   }, [])
+
+  const fetchAsrStatus = async () => {
+    try {
+      const status = await speechRecognitionApi.getStatus()
+      setAsrStatus(status)
+    } catch (error) {
+      console.error('获取语音识别状态失败:', error)
+      message.error('获取语音识别状态失败')
+    }
+  }
 
   const loadData = async () => {
     try {
@@ -69,6 +85,7 @@ const SettingsPage: React.FC = () => {
       
       setCurrentProvider(provider)
       setSelectedProvider(settings.llm_provider || 'dashscope')
+      setSelectedAsrMethod(settings.asr_method || 'bcut_asr')
       
       // 设置表单初始值
       form.setFieldsValue(settings)
@@ -138,6 +155,33 @@ const SettingsPage: React.FC = () => {
       message.error('测试失败: ' + (error.message || '未知错误'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 测试ASR配置
+  const handleAsrTest = async () => {
+    try {
+      setAsrTesting(true)
+      const values = form.getFieldsValue()
+      const config = {
+        method: values.asr_method,
+        language: values.asr_language,
+        model: values.asr_model,
+        timeout: values.asr_timeout,
+        output_format: values.asr_output_format,
+        enable_timestamps: values.asr_enable_timestamps,
+        enable_punctuation: values.asr_enable_punctuation,
+        enable_speaker_diarization: values.asr_enable_speaker_diarization,
+        openai_api_key: values.asr_openai_api_key,
+        openai_base_url: values.asr_openai_base_url
+      }
+      
+      await speechRecognitionApi.testConfig(config)
+      message.success('语音识别配置验证通过')
+    } catch (error: any) {
+      message.error('配置验证失败: ' + (error.response?.data?.detail || error.message || '未知错误'))
+    } finally {
+      setAsrTesting(false)
     }
   }
 
@@ -448,6 +492,195 @@ const SettingsPage: React.FC = () => {
                   </Paragraph>
                 </div>
               </Space>
+            </Card>
+          </TabPane>
+
+          <TabPane tab="语音识别配置" key="asr">
+            <Card title="语音识别配置" className="settings-card">
+              <Alert
+                message="语音识别服务"
+                description="配置语音识别服务，用于将视频中的语音转换为字幕。支持本地Whisper、BcutASR等多种方式。"
+                type="info"
+                showIcon
+                icon={<AudioOutlined />}
+                className="settings-alert"
+              />
+              
+              <Form
+                form={form}
+                layout="vertical"
+                className="settings-form"
+                onFinish={handleSave}
+              >
+                {/* 识别方法 */}
+                <Form.Item
+                  label="语音识别方法"
+                  name="asr_method"
+                  className="form-item"
+                  rules={[{ required: true, message: '请选择语音识别方法' }]}
+                >
+                  <Select
+                    onChange={setSelectedAsrMethod}
+                    className="settings-input"
+                  >
+                    {asrStatus?.available_methods && Object.entries(asrStatus.available_methods).map(([method, available]) => (
+                      <Select.Option key={method} value={method} disabled={!available}>
+                        {method} {!available && '(未安装)'}
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+
+                {/* 语言选择 */}
+                <Form.Item
+                  label="目标语言"
+                  name="asr_language"
+                  className="form-item"
+                >
+                  <Select
+                    showSearch
+                    className="settings-input"
+                    options={asrStatus?.supported_languages?.map((lang: string) => ({ label: lang, value: lang }))}
+                  />
+                </Form.Item>
+
+                {/* Whisper模型 (仅当method为whisper_local时显示) */}
+                {selectedAsrMethod === 'whisper_local' && (
+                  <Form.Item
+                    label="Whisper模型"
+                    name="asr_model"
+                    className="form-item"
+                    tooltip="模型越大准确率越高，但速度越慢"
+                  >
+                    <Select
+                      className="settings-input"
+                      options={asrStatus?.whisper_models?.map((model: string) => ({ label: model, value: model }))}
+                    />
+                  </Form.Item>
+                )}
+
+                {/* OpenAI API 配置 (仅当method为openai_api时显示) */}
+                {selectedAsrMethod === 'openai_api' && (
+                  <>
+                    <Form.Item
+                      label="OpenAI API Key"
+                      name="asr_openai_api_key"
+                      className="form-item"
+                      rules={[{ required: true, message: '请输入OpenAI API Key' }]}
+                    >
+                      <Input.Password
+                        placeholder="sk-..."
+                        prefix={<KeyOutlined />}
+                        className="settings-input"
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      label="OpenAI Base URL (可选)"
+                      name="asr_openai_base_url"
+                      className="form-item"
+                      tooltip="如果使用代理，请填写Base URL"
+                    >
+                      <Input
+                        placeholder="https://api.openai.com/v1"
+                        prefix={<ApiOutlined />}
+                        className="settings-input"
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      label="OpenAI 模型"
+                      name="asr_model"
+                      className="form-item"
+                      tooltip="默认为 whisper-1"
+                    >
+                      <Input
+                        placeholder="whisper-1"
+                        className="settings-input"
+                      />
+                    </Form.Item>
+                  </>
+                )}
+
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item
+                      label="超时时间(秒)"
+                      name="asr_timeout"
+                      className="form-item"
+                      tooltip="0表示无限制"
+                    >
+                      <InputNumber min={0} className="settings-input" style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label="输出格式"
+                      name="asr_output_format"
+                      className="form-item"
+                    >
+                      <Select className="settings-input">
+                        <Select.Option value="srt">SRT字幕</Select.Option>
+                        <Select.Option value="vtt">VTT字幕</Select.Option>
+                        <Select.Option value="txt">纯文本</Select.Option>
+                        <Select.Option value="json">JSON数据</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Form.Item
+                      label="生成时间戳"
+                      name="asr_enable_timestamps"
+                      valuePropName="checked"
+                      className="form-item"
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item
+                      label="添加标点符号"
+                      name="asr_enable_punctuation"
+                      valuePropName="checked"
+                      className="form-item"
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item
+                      label="说话人分离"
+                      name="asr_enable_speaker_diarization"
+                      valuePropName="checked"
+                      className="form-item"
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Form.Item className="form-item">
+                  <Space>
+                    <Button
+                      type="default"
+                      icon={<ApiOutlined />}
+                      onClick={handleAsrTest}
+                      loading={asrTesting}
+                    >
+                      测试配置
+                    </Button>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      icon={<SaveOutlined />}
+                      loading={loading}
+                    >
+                      保存配置
+                    </Button>
+                  </Space>
+                </Form.Item>
+              </Form>
             </Card>
           </TabPane>
 

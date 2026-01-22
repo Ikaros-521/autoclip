@@ -148,6 +148,46 @@ export const settingsApi = {
   }
 }
 
+// 语音识别相关API
+export interface SpeechRecognitionStatus {
+  available_methods: Record<string, boolean>
+  supported_languages: string[]
+  whisper_models: string[]
+  default_config: any
+}
+
+export const speechRecognitionApi = {
+  // 获取语音识别状态
+  getStatus: (): Promise<SpeechRecognitionStatus> => {
+    return api.get('/speech-recognition/status')
+  },
+
+  // 获取可用方法
+  getMethods: (): Promise<Record<string, boolean>> => {
+    return api.get('/speech-recognition/methods')
+  },
+
+  // 获取支持语言
+  getLanguages: (): Promise<string[]> => {
+    return api.get('/speech-recognition/languages')
+  },
+
+  // 获取Whisper模型
+  getWhisperModels: (): Promise<string[]> => {
+    return api.get('/speech-recognition/whisper-models')
+  },
+
+  // 测试语音识别配置
+  testConfig: (config: any): Promise<any> => {
+    return api.post('/speech-recognition/test', config)
+  },
+  
+  // 获取安装指南
+  getInstallGuide: (method: string): Promise<any> => {
+    return api.get('/speech-recognition/install-guide', { params: { method } })
+  }
+}
+
 // 项目相关API
 export const projectApi = {
   // 获取视频分类配置
