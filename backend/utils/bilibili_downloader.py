@@ -116,7 +116,27 @@ class BilibiliDownloader:
             )
             return BilibiliVideoInfo(info_dict)
         except Exception as e:
-            raise ProcessingError(f"获取视频信息失败: {str(e)}")
+            error_msg = str(e)
+            # 处理浏览器Cookies数据库被锁定（浏览器未关闭）的情况
+            if self.browser and ("Could not copy Chrome cookie database" in error_msg or "permission denied" in error_msg.lower()):
+                logger.warning(f"无法读取浏览器Cookies（可能浏览器未关闭），尝试不使用Cookies获取信息: {error_msg}")
+                
+                # 移除Cookies选项重试
+                if 'cookiesfrombrowser' in ydl_opts:
+                    del ydl_opts['cookiesfrombrowser']
+                    try:
+                        loop = asyncio.get_event_loop()
+                        info_dict = await loop.run_in_executor(
+                            None, 
+                            self._extract_info_sync, 
+                            url, 
+                            ydl_opts
+                        )
+                        return BilibiliVideoInfo(info_dict)
+                    except Exception as retry_e:
+                        raise ProcessingError(f"获取视频信息失败(重试后): {str(retry_e)}")
+            
+            raise ProcessingError(f"获取视频信息失败: {error_msg}")
     
     def _extract_info_sync(self, url: str, ydl_opts: Dict[str, Any]) -> Dict[str, Any]:
         """同步方式提取视频信息"""
@@ -173,12 +193,34 @@ class BilibiliDownloader:
                 progress_callback("开始下载视频和字幕...", 0)
             
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                self._download_sync,
-                url,
-                ydl_opts
-            )
+            
+            try:
+                await loop.run_in_executor(
+                    None,
+                    self._download_sync,
+                    url,
+                    ydl_opts
+                )
+            except Exception as e:
+                error_msg = str(e)
+                # 处理浏览器Cookies数据库被锁定（浏览器未关闭）的情况
+                if self.browser and ("Could not copy Chrome cookie database" in error_msg or "permission denied" in error_msg.lower()):
+                    logger.warning(f"下载时无法读取浏览器Cookies（可能浏览器未关闭），尝试不使用Cookies下载: {error_msg}")
+                    if progress_callback:
+                        progress_callback("浏览器Cookies读取失败（请关闭浏览器），尝试不使用Cookies下载...", 5)
+                    
+                    # 移除Cookies选项重试
+                    if 'cookiesfrombrowser' in ydl_opts:
+                        del ydl_opts['cookiesfrombrowser']
+                        
+                    await loop.run_in_executor(
+                        None,
+                        self._download_sync,
+                        url,
+                        ydl_opts
+                    )
+                else:
+                    raise e
             
             # 查找下载的文件
             video_path = self._find_downloaded_video(safe_title)
