@@ -93,3 +93,9 @@ dump.rdb
 # 临时文件
 *.tmp
 *.temp
+
+frontend/node_modules
+tools/redis
+tools/ffmpeg
+hf_download/hub
+backend.log

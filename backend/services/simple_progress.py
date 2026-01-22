@@ -3,7 +3,7 @@
 基于你提出的"做笨做稳"方案
 """
 
-import time
+import time, os
 import json
 import logging
 from typing import List, Tuple, Optional, Dict, Any
@@ -94,12 +94,15 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
     
     try:
         # 1) 持久化最新快照（给轮询/刷新用）
-        r.hset(f"progress:project:{project_id}", mapping={
+        # 兼容旧版本 redis-py 的 hset 方法（不支持 mapping 参数）
+        data = {
             "stage": stage, 
             "percent": str(percent), 
             "message": message, 
             "ts": str(payload["ts"])
-        })
+        }
+        for key, value in data.items():
+            r.hset(f"progress:project:{project_id}", key, value)
         
         # 2) 即时广播（可选，用于WebSocket）
         r.publish(f"progress:project:{project_id}", json.dumps(payload))

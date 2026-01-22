@@ -1,5 +1,9 @@
 {
-  "dashscope_api_key": "sk-1280fee632a541c1a69d3873f850358b",
+  "llm_provider": "dashscope",
+  "dashscope_api_key": "sk-123456",
+  "openai_api_key": "",
+  "gemini_api_key": "",
+  "siliconflow_api_key": "",
   "model_name": "qwen-plus",
   "chunk_size": 5000,
   "min_score_threshold": 0.7,

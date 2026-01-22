@@ -8,6 +8,7 @@ from typing import Optional
 import base64
 from PIL import Image
 import io
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -124,24 +125,43 @@ class ThumbnailGenerator:
             封面图片路径，如果不存在则返回None
         """
         try:
-            # 检查是否有嵌入的封面图片
+            # 获取视频信息
+            info = self.get_video_info(video_path)
+            if not info:
+                return None
+            
+            # 查找封面流
+            cover_stream_index = -1
+            for i, stream in enumerate(info.get('streams', [])):
+                if stream.get('codec_type') == 'video':
+                    # 检查是否为附带图片 (attached_pic)
+                    disposition = stream.get('disposition', {})
+                    if disposition.get('attached_pic') == 1:
+                        cover_stream_index = stream.get('index', i)
+                        break
+            
+            if cover_stream_index == -1:
+                return None
+                
+            logger.info(f"发现视频封面流: 索引 {cover_stream_index}")
+            
+            output_path = video_path.parent / f"{video_path.stem}_cover.jpg"
+            
+            # 提取封面
             cmd = [
                 'ffmpeg',
                 '-i', str(video_path),
-                '-an',  # 禁用音频
-                '-vcodec', 'copy',  # 复制视频流
+                '-map', f'0:{cover_stream_index}',
+                '-c', 'copy',
                 '-f', 'image2',
-                '-vframes', '1',
                 '-y',
-                str(video_path.parent / f"{video_path.stem}_cover.jpg")
+                str(output_path)
             ]
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                cover_path = video_path.parent / f"{video_path.stem}_cover.jpg"
-                if cover_path.exists() and cover_path.stat().st_size > 0:
-                    logger.info(f"成功提取视频封面: {cover_path}")
-                    return cover_path
+            if result.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+                logger.info(f"成功提取视频封面: {output_path}")
+                return output_path
             
             return None
             

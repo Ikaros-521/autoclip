@@ -83,18 +83,31 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
                 
                 logger.info(f"使用Whisper生成字幕 - 语言: auto, 模型: {model}")
                 
-                generated_subtitle = generate_subtitle_for_video(
-                    Path(video_path),
-                    language="auto",
-                    model=model
-                )
-                srt_path = str(generated_subtitle)
-                logger.info(f"Whisper字幕生成成功: {srt_path}")
+                try:
+                    generated_subtitle = generate_subtitle_for_video(
+                        Path(video_path),
+                        language="auto",
+                        model=model
+                    )
+                    srt_path = str(generated_subtitle)
+                    logger.info(f"Whisper字幕生成成功: {srt_path}")
+                except Exception as inner_e:
+                    logger.warning(f"Whisper字幕生成失败: {str(inner_e)}，将跳过字幕生成继续处理")
+                    # 创建一个空的SRT文件，确保流程不中断
+                    raw_dir = Path(video_path).parent
+                    srt_path = raw_dir / "input.srt"
+                    with open(srt_path, "w", encoding="utf-8") as f:
+                        f.write("1\n00:00:00,000 --> 00:00:01,000\n[无字幕]\n")
+                    logger.info(f"已生成占位字幕文件: {srt_path}")
                 
             except Exception as e:
-                logger.error(f"Whisper字幕生成失败: {str(e)}")
-                # 字幕生成失败，使用空字幕文件
-                srt_path = None
+                logger.error(f"Whisper字幕模块初始化失败: {str(e)}")
+                # 同样创建空字幕文件
+                raw_dir = Path(video_path).parent
+                srt_path = raw_dir / "input.srt"
+                with open(srt_path, "w", encoding="utf-8") as f:
+                    f.write("1\n00:00:00,000 --> 00:00:01,000\n[无字幕]\n")
+                logger.info(f"已生成占位字幕文件: {srt_path}")
         
         # 3. 更新项目状态为处理中
         logger.info(f"更新项目 {project_id} 状态为处理中...")

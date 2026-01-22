@@ -237,14 +237,27 @@ class SpeechRecognizer:
         return False
     
     def _check_whisper_availability(self) -> bool:
-        """检查本地Whisper是否可用"""
+        """检查本地Whisper是否可用 (支持 faster-whisper 和 openai-whisper)"""
+        # 1. 优先检查 faster-whisper (Python包)
+        try:
+            import faster_whisper
+            logger.info("检测到 faster-whisper 已安装")
+            return True
+        except ImportError:
+            pass
+
+        # 2. 检查 whisper (命令行工具)
         try:
             result = subprocess.run(['whisper', '--help'], 
                                   capture_output=True, text=True, timeout=5)
-            return result.returncode == 0
+            if result.returncode == 0:
+                logger.info("检测到 openai-whisper CLI 已安装")
+                return True
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            logger.warning("本地Whisper未安装或不可用")
-            return False
+            pass
+            
+        logger.warning("本地Whisper未安装或不可用 (未检测到 faster-whisper 或 whisper CLI)")
+        return False
     
     def _check_openai_availability(self) -> bool:
         """检查OpenAI API是否可用"""
@@ -501,20 +514,91 @@ class SpeechRecognizer:
             logger.error(error_msg)
             raise SpeechRecognitionError(error_msg)
     
+    def _format_timestamp(self, seconds: float) -> str:
+        """转换秒数为SRT时间戳格式 (HH:MM:SS,mmm)"""
+        whole_seconds = int(seconds)
+        milliseconds = int((seconds - whole_seconds) * 1000)
+        
+        hours = whole_seconds // 3600
+        minutes = (whole_seconds % 3600) // 60
+        seconds = whole_seconds % 60
+        
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+
+    def _generate_subtitle_faster_whisper(self, video_path: Path, output_path: Path, 
+                                        config: SpeechRecognitionConfig) -> Path:
+        """使用 faster-whisper 生成字幕"""
+        try:
+            from faster_whisper import WhisperModel
+            import torch
+        except ImportError:
+            raise SpeechRecognitionError("faster-whisper 未安装")
+
+        logger.info(f"开始使用 faster-whisper 生成字幕: {video_path}")
+        
+        try:
+            # 确定运行设备
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            compute_type = "float16" if device == "cuda" else "int8"
+            logger.info(f"使用设备: {device}, 计算类型: {compute_type}")
+            
+            # 加载模型
+            model_size = config.model
+            model = WhisperModel(model_size, device=device, compute_type=compute_type)
+            
+            # 转录
+            segments, info = model.transcribe(
+                str(video_path), 
+                beam_size=5,
+                language=None if config.language == LanguageCode.AUTO else config.language,
+                vad_filter=True  # 启用VAD过滤静音
+            )
+            
+            logger.info(f"检测到语言: {info.language}, 概率: {info.language_probability:.2f}")
+            
+            # 生成SRT内容
+            srt_lines = []
+            for i, segment in enumerate(segments, start=1):
+                start_time = self._format_timestamp(segment.start)
+                end_time = self._format_timestamp(segment.end)
+                text = segment.text.strip()
+                
+                srt_lines.append(f"{i}")
+                srt_lines.append(f"{start_time} --> {end_time}")
+                srt_lines.append(f"{text}\n")
+            
+            # 写入文件
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(srt_lines))
+                
+            logger.info(f"faster-whisper 字幕生成成功: {output_path}")
+            return output_path
+            
+        except Exception as e:
+            logger.error(f"faster-whisper 执行失败: {e}")
+            raise SpeechRecognitionError(f"faster-whisper 执行失败: {e}")
+
     def _generate_subtitle_whisper_local(self, video_path: Path, output_path: Path, 
                                        config: SpeechRecognitionConfig) -> Path:
-        """使用本地Whisper生成字幕"""
+        """使用本地Whisper生成字幕 (优先使用 faster-whisper)"""
+        # 尝试使用 faster-whisper
+        try:
+            import faster_whisper
+            return self._generate_subtitle_faster_whisper(video_path, output_path, config)
+        except ImportError:
+            pass
+
+        # Fallback 到命令行 whisper
         if not self.available_methods[SpeechRecognitionMethod.WHISPER_LOCAL]:
             raise SpeechRecognitionError(
-                "本地Whisper不可用，请安装whisper: pip install openai-whisper\n"
-                "同时确保已安装ffmpeg:\n"
-                "  macOS: brew install ffmpeg\n"
-                "  Ubuntu: sudo apt install ffmpeg\n"
-                "  Windows: 下载ffmpeg并添加到PATH"
+                "本地Whisper不可用，请安装 faster-whisper 或 openai-whisper:\n"
+                "pip install faster-whisper\n"
+                "或\n"
+                "pip install openai-whisper"
             )
         
         try:
-            logger.info(f"开始使用本地Whisper生成字幕: {video_path}")
+            logger.info(f"开始使用本地Whisper CLI生成字幕: {video_path}")
             
             # 检查视频文件是否存在
             if not video_path.exists():
@@ -734,8 +818,8 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         
         # 按优先级选择方法（bcut-asr优先，因为速度更快）
         priority_methods = [
-            SpeechRecognitionMethod.BCUT_ASR,
             SpeechRecognitionMethod.WHISPER_LOCAL,
+            # SpeechRecognitionMethod.BCUT_ASR,
             SpeechRecognitionMethod.OPENAI_API,
             SpeechRecognitionMethod.AZURE_SPEECH,
             SpeechRecognitionMethod.GOOGLE_SPEECH,

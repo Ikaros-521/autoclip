@@ -43,8 +43,8 @@ class CeleryConfig:
         'backend.tasks.processing.*': {'queue': 'processing'},
         'backend.tasks.video.*': {'queue': 'video'},
         'backend.tasks.notification.*': {'queue': 'notification'},
-        'backend.tasks.upload.*': {'queue': 'upload'},  # 添加upload任务路由
-        'backend.tasks.import_processing.*': {'queue': 'processing'},  # 导入任务路由
+        'backend.tasks.upload.*': {'queue': 'upload'},
+        'backend.tasks.import_processing.*': {'queue': 'processing'},  # 确保导入任务使用 processing 队列
     }
     
     # 定时任务配置

@@ -76,7 +76,7 @@ class LLMManager:
                 self.current_provider = LLMProviderFactory.create_provider(
                     provider_type, api_key, model_name
                 )
-                logger.info(f"已初始化{provider_type.value}提供商，模型: {model_name}")
+                logger.info(f"已初始化{provider_type.value}提供商，模型: {model_name}, API密钥: {api_key[:8]}...")
             else:
                 logger.warning(f"未找到{provider_type.value}的API密钥")
                 
@@ -126,13 +126,15 @@ class LLMManager:
                 provider_settings[key_name] = api_key
             
             self.update_settings(provider_settings)
+
+            logger.info(f"已切换到{provider_type.value}提供商，模型: {model_name}, API密钥: {api_key[:8]}...")
             
             # 创建新的提供商实例
             self.current_provider = LLMProviderFactory.create_provider(
                 provider_type, api_key, model_name
             )
             
-            logger.info(f"已切换到{provider_type.value}提供商，模型: {model_name}")
+            logger.info(f"已切换到{provider_type.value}提供商，模型: {model_name}, API密钥: {api_key[:8]}...")
             
         except Exception as e:
             logger.error(f"设置提供商失败: {e}")
