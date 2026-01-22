@@ -125,14 +125,14 @@ if exist "%TOOLS_DIR%\ffmpeg\bin" (
 )
 
 :: Check bcut-asr and FFmpeg
-echo [INFO] Checking bcut-asr and FFmpeg...
-python scripts/install_bcut_asr.py
-if %errorlevel% neq 0 (
-    echo [ERROR] Failed to install bcut-asr or dependencies.
-    echo [TIP] Please check your network connection and try again.
-    pause
-    exit /b 1
-)
+@REM echo [INFO] Checking bcut-asr and FFmpeg...
+@REM python scripts/install_bcut_asr.py
+@REM if %errorlevel% neq 0 (
+@REM     echo [ERROR] Failed to install bcut-asr or dependencies.
+@REM     echo [TIP] Please check your network connection and try again.
+@REM     pause
+@REM     exit /b 1
+@REM )
 
 
 :: 4. Start Redis
@@ -191,6 +191,8 @@ echo [INFO] System is starting, waiting for services...
 timeout /t 8 >nul
 
 echo [SUCCESS] Opening browser...
+:: wait 3 seconds for backend to start
+timeout /t 3 >nul
 if "%DEV_MODE%"=="1" (
     start http://localhost:%FRONTEND_PORT%
 ) else (
