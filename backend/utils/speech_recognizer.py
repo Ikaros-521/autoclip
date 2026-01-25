@@ -679,6 +679,16 @@ class SpeechRecognizer:
             # 写入文件
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(subtitle_content)
+                
+            # 如果输出格式不是SRT，额外保存一份SRT文件
+            if config.output_format != "srt":
+                srt_path = output_path.with_suffix('.srt')
+                try:
+                    with open(srt_path, 'w', encoding='utf-8') as f:
+                        f.write(subtitle.to_srt())
+                    logger.info(f"额外保存SRT文件: {srt_path}")
+                except Exception as e:
+                    logger.warning(f"无法额外保存SRT文件: {e}")
             
             logger.info(f"bcut-asr字幕生成成功: {output_path}")
             return output_path
@@ -747,8 +757,19 @@ class SpeechRecognizer:
                 srt_lines.append(f"{text}\n")
             
             # 写入文件
+            srt_content = "\n".join(srt_lines)
             with open(output_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(srt_lines))
+                f.write(srt_content)
+                
+            # 如果输出路径不是.srt结尾，额外保存一份.srt
+            if output_path.suffix.lower() != ".srt":
+                srt_path = output_path.with_suffix('.srt')
+                try:
+                    with open(srt_path, "w", encoding="utf-8") as f:
+                        f.write(srt_content)
+                    logger.info(f"额外保存SRT文件: {srt_path}")
+                except Exception as e:
+                    logger.warning(f"无法额外保存SRT文件: {e}")
                 
             logger.info(f"faster-whisper 字幕生成成功: {output_path}")
             return output_path
@@ -826,6 +847,27 @@ class SpeechRecognizer:
                 # 检查输出文件是否存在
                 if output_path.exists():
                     logger.info(f"本地Whisper字幕生成成功: {output_path}")
+                    
+                    # 如果输出不是SRT，尝试转换
+                    if output_path.suffix.lower() != ".srt":
+                        try:
+                            srt_path = output_path.with_suffix('.srt')
+                            if not srt_path.exists():
+                                if output_path.suffix.lower() == ".json":
+                                    # 尝试从JSON转换
+                                    import json
+                                    with open(output_path, 'r', encoding='utf-8') as f:
+                                        data = json.load(f)
+                                    
+                                    # 尝试转换
+                                    srt_content = self._json_to_srt(data)
+                                    if srt_content:
+                                        with open(srt_path, 'w', encoding='utf-8') as f:
+                                            f.write(srt_content)
+                                        logger.info(f"已从JSON转换并保存SRT文件: {srt_path}")
+                        except Exception as e:
+                            logger.warning(f"尝试转换SRT失败: {e}")
+                            
                     return output_path
                 else:
                     # 尝试查找其他可能的输出文件
@@ -1023,6 +1065,56 @@ class SpeechRecognizer:
                 f.write(str(transcript))
                 
             logger.info(f"OpenAI API字幕生成成功: {output_path}")
+
+            # 如果输出格式不是SRT，额外保存一份SRT文件
+            if config.output_format != "srt":
+                srt_path = output_path.with_suffix('.srt')
+                try:
+                    srt_content = None
+                    if response_format == "json":
+                        try:
+                            # 尝试解析JSON内容
+                            import json
+                            data = json.loads(str(transcript))
+                            # 只有包含segments的JSON才能转换为SRT
+                            if "segments" in data:
+                                srt_content = self._json_to_srt(data)
+                            else:
+                                logger.warning("OpenAI API返回的JSON不包含segments，无法转换为SRT")
+                        except Exception:
+                            pass
+                    elif response_format == "vtt":
+                        # 尝试将VTT内容转换为SRT
+                        content = str(transcript)
+                        # 简单的VTT转SRT实现
+                        lines = content.splitlines()
+                        srt_lines = []
+                        counter = 1
+                        is_header = True
+                        for line in lines:
+                            if is_header:
+                                if line.strip() == "WEBVTT":
+                                    continue
+                                if line.strip() == "":
+                                    is_header = False
+                                continue
+                            
+                            if "-->" in line:
+                                srt_lines.append(str(counter))
+                                srt_lines.append(line.replace(".", ","))
+                                counter += 1
+                            else:
+                                srt_lines.append(line)
+                        
+                        srt_content = "\n".join(srt_lines)
+                    
+                    if srt_content:
+                        with open(srt_path, 'w', encoding='utf-8') as f:
+                            f.write(srt_content)
+                        logger.info(f"额外保存SRT文件: {srt_path}")
+                except Exception as e:
+                    logger.warning(f"无法额外保存SRT文件: {e}")
+
             return output_path
             
         except Exception as e:

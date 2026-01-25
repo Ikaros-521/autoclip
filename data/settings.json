@@ -1,10 +1,10 @@
 {
-  "llm_provider": "openai",
+  "llm_provider": "siliconflow",
   "dashscope_api_key": "sk-2da11111111111111",
-  "openai_api_key": "sk-r7rGqejoE53c2qL7C68f83F499454e13B66aEc37D5D15371",
+  "openai_api_key": "sk-EhRvEzFPTmmkD7XU605a1aA42eEd4f5aAf5a3aCb85Fb8c21",
   "openai_base_url": "http://47.96.136.235:3000/v1",
   "gemini_api_key": "",
-  "siliconflow_api_key": "sk-yccpsezwgswtwhhywcurkilggtgjbvsyapsuqviytmtqbzoe",
+  "siliconflow_api_key": "sk-ezxdghykcwmbjabuusrtgiiptebxqljsyjmekquhbdcpurnu",
   "model_name": "Qwen/Qwen3-8B",
   "chunk_size": 5000,
   "min_score_threshold": 0.7,
@@ -18,5 +18,5 @@
   "asr_enable_punctuation": true,
   "asr_enable_speaker_diarization": true,
   "asr_openai_api_key": "sk-ezxdghykcwmbjabuusrtgiiptebxqljsyjmekquhbdcpurnu",
-  "asr_openai_base_url": "https://api.siliconflow.cn/v1"
+  "asr_openai_base_url": "http://127.0.0.1:9000/v1"
 }
