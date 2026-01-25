@@ -373,7 +373,8 @@ class VideoProcessor:
             
             # 使用标题作为文件名，并清理不合法的字符
             # 在文件名中包含clip_id，便于后续合集拼接时查找
-            safe_title = VideoProcessor.sanitize_filename(title)
+            # safe_title = VideoProcessor.sanitize_filename(title)
+            safe_title = "same"
             output_path = self.clips_dir / f"{clip_id}_{safe_title}.mp4"
             
             logger.info(f"提取切片 {clip_id}: {start_time} -> {end_time}, 输出: {output_path}")
